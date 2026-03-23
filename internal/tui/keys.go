@@ -51,8 +51,8 @@ func defaultKeyMap() keyMap {
 			key.WithHelp("R", "run all"),
 		),
 		ExpandAll: key.NewBinding(
-			key.WithKeys("e"),
-			key.WithHelp("e", "expand all"),
+			key.WithKeys("o"),
+			key.WithHelp("o", "expand all"),
 		),
 		CollapseAll: key.NewBinding(
 			key.WithKeys("c"),

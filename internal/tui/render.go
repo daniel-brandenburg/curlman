@@ -167,7 +167,7 @@ func renderKeyBar(m Model) string {
 		if node != nil && node.IsDir {
 			parts = append(parts,
 				kp("←→", "expand/collapse"),
-				kp("e", "expand all"),
+				kp("o", "open all"),
 				kp("c", "collapse all"),
 				kp("r", "run folder"),
 			)
@@ -228,19 +228,32 @@ func renderList(m Model, innerHeight int) string {
 		indent := strings.Repeat("  ", node.Depth)
 		var line string
 		if node.IsDir {
-			arrow := "▼"
+			arrowCh := "▾"
 			if !node.Expanded {
-				arrow = "▶"
+				arrowCh = "▸"
 			}
 			ds := dirStatus(m.items, node.DirGroup)
 			if selected {
+				// Selection overrides all color — show status icon so state is visible.
 				iconCh := statusIconChar(ds, m.spinner.View())
-				raw := fmt.Sprintf("%s%s %s %s/", indent, arrow, iconCh, node.Label)
+				raw := fmt.Sprintf("%s%s %s %s/", indent, arrowCh, iconCh, node.Label)
 				line = selectedItemStyle.Width(m.leftWidth).Render(raw)
 			} else {
-				icon := statusIcon(ds, m.spinner.View())
-				raw := fmt.Sprintf("%s%s %s %s/", indent, arrow, icon, node.Label)
-				line = groupHeaderStyle.Render(raw)
+				// Arrow is always dim; folder label is colored by aggregate status.
+				arrow := lipgloss.NewStyle().Foreground(colorMuted).Render(arrowCh)
+				var labelFg lipgloss.Color
+				switch ds {
+				case StatusPass:
+					labelFg = colorPass
+				case StatusFail, StatusError:
+					labelFg = colorFail
+				case StatusRunning:
+					labelFg = colorRunning
+				default:
+					labelFg = colorSubtext
+				}
+				label := lipgloss.NewStyle().Foreground(labelFg).Render(node.Label + "/")
+				line = indent + arrow + " " + label
 			}
 		} else {
 			status := m.items[node.ItemIdx].Status
@@ -250,8 +263,8 @@ func renderList(m Model, innerHeight int) string {
 				line = selectedItemStyle.Width(m.leftWidth).Render(raw)
 			} else {
 				icon := statusIcon(status, m.spinner.View())
-				raw := fmt.Sprintf("%s%s %s", indent, icon, node.Label)
-				line = raw
+				label := lipgloss.NewStyle().Foreground(colorText).Render(node.Label)
+				line = indent + icon + " " + label
 			}
 		}
 
