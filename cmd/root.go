@@ -47,6 +47,7 @@ Omit to run all tests.`,
 
 	addTestFlags(root, &envFile, &testPath, &update, &failFast, &verbose)
 	root.AddCommand(newRunCmd())
+	root.AddCommand(newTUICmd())
 	return root
 }
 

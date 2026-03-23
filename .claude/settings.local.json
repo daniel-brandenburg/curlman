@@ -4,7 +4,10 @@
       "Bash(go mod:*)",
       "Bash(go build:*)",
       "Bash(go run:*)",
-      "Bash(./curlman.exe --path tests/auth --env .env.test)"
+      "Bash(./curlman.exe --path tests/auth --env .env.test)",
+      "Bash(go get:*)",
+      "Bash(go vet:*)",
+      "Bash(./curlman.exe tui:*)"
     ]
   }
 }
