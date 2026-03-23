@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -74,6 +75,9 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
 			list = append(list, u)
 		}
 		mu.RUnlock()
+		sort.Slice(list, func(i, j int) bool {
+			return list[i].ID < list[j].ID
+		})
 		writeJSON(w, http.StatusOK, map[string]any{"users": list, "count": len(list)})
 
 	case http.MethodPost:

@@ -160,9 +160,11 @@ func parseBodyAssertion(rest string) (Assertion, error) {
 		if len(parts) < 3 {
 			return Assertion{}, fmt.Errorf("operator %q requires a value", operator)
 		}
-		// Rejoin the rest after operator in case value has spaces
-		expected := strings.TrimSpace(strings.SplitN(rest, parts[1], 2)[1])
-		expected = strings.TrimSpace(expected)
+		// Trim jsonPath then whitespace then operator from the front of rest to
+		// recover the expected value without splitting on the operator literal.
+		after := strings.TrimPrefix(rest, jsonPath)
+		after = strings.TrimPrefix(strings.TrimSpace(after), parts[1])
+		expected := strings.TrimSpace(after)
 		return Assertion{
 			Kind:     AssertBody,
 			JSONPath: jsonPath,

@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/danielbrandenburg/curlman/internal/asserter"
 	"github.com/danielbrandenburg/curlman/internal/discovery"
@@ -14,7 +14,12 @@ import (
 	"github.com/danielbrandenburg/curlman/internal/reporter"
 	"github.com/danielbrandenburg/curlman/internal/runner"
 	"github.com/spf13/cobra"
+	"github.com/tidwall/gjson"
 )
+
+// ErrTestsFailed is returned when one or more tests fail. The reporter has
+// already printed the details, so the caller should exit without further output.
+var ErrTestsFailed = errors.New("tests failed")
 
 // NewRootCmd creates and returns the root cobra command.
 func NewRootCmd() *cobra.Command {
@@ -25,25 +30,22 @@ func NewRootCmd() *cobra.Command {
 	var verbose bool
 
 	root := &cobra.Command{
-		Use:   "curlman [test-path]",
-		Short: "Run HTTP tests defined as .http files",
+		Use:           "curlman [test-path]",
+		Short:         "Run HTTP tests defined as .http files",
 		Long: `Run HTTP tests found in the current directory (or --path).
 
 test-path is an optional filter: a stem name ("create"), path prefix
 ("users/"), or shell glob ("tests/*" — the common directory is used).
 Omit to run all tests.`,
-		Args: cobra.ArbitraryArgs,
+		Args:          cobra.ArbitraryArgs,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTests(envFile, testPath, filterFromArgs(args), update, failFast, verbose)
 		},
 	}
 
-	root.Flags().StringVar(&envFile, "env", ".env", "path to .env file")
-	root.Flags().StringVar(&testPath, "path", "", "directory to search for tests (default: current directory)")
-	root.Flags().BoolVar(&update, "update", false, "overwrite .assert files with actual responses")
-	root.Flags().BoolVar(&failFast, "fail-fast", false, "stop after first failure")
-	root.Flags().BoolVarP(&verbose, "verbose", "v", false, "print full request and response for every test")
-
+	addTestFlags(root, &envFile, &testPath, &update, &failFast, &verbose)
 	root.AddCommand(newRunCmd())
 	return root
 }
@@ -69,13 +71,17 @@ Omit to run all tests.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&envFile, "env", ".env", "path to .env file")
-	cmd.Flags().StringVar(&testPath, "path", "", "directory to search for tests (default: current directory)")
-	cmd.Flags().BoolVar(&update, "update", false, "overwrite .assert files with actual responses")
-	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "stop after first failure")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print full request and response for every test")
-
+	addTestFlags(cmd, &envFile, &testPath, &update, &failFast, &verbose)
 	return cmd
+}
+
+// addTestFlags registers the shared set of test flags onto cmd.
+func addTestFlags(cmd *cobra.Command, envFile, testPath *string, update, failFast, verbose *bool) {
+	cmd.Flags().StringVar(envFile, "env", ".env", "path to .env file")
+	cmd.Flags().StringVar(testPath, "path", "", "directory to search for tests (default: current directory)")
+	cmd.Flags().BoolVar(update, "update", false, "overwrite .assert files with actual responses")
+	cmd.Flags().BoolVar(failFast, "fail-fast", false, "stop after first failure")
+	cmd.Flags().BoolVarP(verbose, "verbose", "v", false, "print full request and response for every test")
 }
 
 // filterFromArgs derives a test filter from CLI args.
@@ -227,9 +233,7 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 				continue
 			}
 
-			start := time.Now()
 			resp, err := runner.Run(req)
-			duration := time.Since(start)
 			if err != nil {
 				reporter.Error(testLabel, err)
 				failed++
@@ -255,10 +259,10 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 			}
 
 			if allPassed {
-				reporter.Pass(testLabel, duration)
+				reporter.Pass(testLabel, resp.Duration)
 				passed++
 			} else {
-				reporter.Fail(testLabel, duration, failResults)
+				reporter.Fail(testLabel, resp.Duration, failResults)
 				failed++
 				hasFailures = true
 				if failFast {
@@ -275,7 +279,7 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 	reporter.Summary(passed, failed, skipped)
 
 	if hasFailures {
-		os.Exit(1)
+		return ErrTestsFailed
 	}
 	return nil
 }
@@ -308,7 +312,26 @@ func writeSnapshot(pair discovery.TestPair, req parser.Request, resp runner.Resp
 	}
 
 	if resp.Body != "" {
-		fmt.Fprintf(&sb, "BODY $ exists\n")
+		if gjson.Valid(resp.Body) {
+			result := gjson.Parse(resp.Body)
+			if result.IsObject() {
+				result.ForEach(func(key, val gjson.Result) bool {
+					switch val.Type {
+					case gjson.String:
+						fmt.Fprintf(&sb, "BODY $.%s == %q\n", key.String(), val.String())
+					case gjson.Number, gjson.True, gjson.False:
+						fmt.Fprintf(&sb, "BODY $.%s == %s\n", key.String(), val.Raw)
+					default:
+						fmt.Fprintf(&sb, "BODY $.%s exists\n", key.String())
+					}
+					return true
+				})
+			} else {
+				fmt.Fprintf(&sb, "BODY $ exists\n")
+			}
+		} else {
+			fmt.Fprintf(&sb, "BODY $ exists\n")
+		}
 	}
 
 	return os.WriteFile(assertFile, []byte(sb.String()), 0644)

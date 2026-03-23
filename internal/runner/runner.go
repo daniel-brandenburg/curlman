@@ -10,6 +10,10 @@ import (
 	"github.com/danielbrandenburg/curlman/internal/parser"
 )
 
+// defaultClient is shared across all test runs for connection pooling and has
+// a sensible timeout to prevent a hung server from blocking the test run.
+var defaultClient = &http.Client{Timeout: 30 * time.Second}
+
 // Response holds the parsed HTTP response.
 type Response struct {
 	StatusCode int
@@ -34,9 +38,8 @@ func Run(req parser.Request) (Response, error) {
 		httpReq.Header.Set(k, v)
 	}
 
-	client := &http.Client{}
 	start := time.Now()
-	resp, err := client.Do(httpReq)
+	resp, err := defaultClient.Do(httpReq)
 	if err != nil {
 		return Response{}, fmt.Errorf("executing request: %w", err)
 	}

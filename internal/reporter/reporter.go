@@ -2,18 +2,42 @@ package reporter
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/danielbrandenburg/curlman/internal/asserter"
 )
 
-const (
-	colorGreen  = "\033[32m"
-	colorRed    = "\033[31m"
-	colorYellow = "\033[33m"
-	colorReset  = "\033[0m"
+var (
+	colorGreen  string
+	colorRed    string
+	colorYellow string
+	colorReset  string
 )
+
+func init() {
+	if shouldUseColor() {
+		colorGreen  = "\033[32m"
+		colorRed    = "\033[31m"
+		colorYellow = "\033[33m"
+		colorReset  = "\033[0m"
+	}
+}
+
+func shouldUseColor() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
 
 // Pass prints a passing test line.
 func Pass(name string, duration time.Duration) {

@@ -1,6 +1,8 @@
 package env
 
 import (
+	"errors"
+	"os"
 	"regexp"
 
 	"github.com/joho/godotenv"
@@ -16,8 +18,10 @@ func Load(path string) (map[string]string, error) {
 	}
 	vars, err := godotenv.Read(path)
 	if err != nil {
-		// Gracefully handle missing file
-		return map[string]string{}, nil
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]string{}, nil
+		}
+		return nil, err
 	}
 	return vars, nil
 }
