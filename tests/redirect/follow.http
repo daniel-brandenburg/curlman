@@ -1,0 +1,2 @@
+### Follow 302 redirect
+GET http://{{BASE_URL}}/redirect/302

@@ -1,0 +1,3 @@
+### Protected endpoint without token
+STATUS 401
+BODY $.error exists

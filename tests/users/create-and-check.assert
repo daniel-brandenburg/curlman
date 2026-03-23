@@ -1,0 +1,10 @@
+### create
+STATUS 201
+BODY $.name == "Charlie"
+BODY $.email == "charlie@example.com"
+BODY $.id exists
+
+### list-after
+STATUS 200
+BODY $.users exists
+BODY $.count exists

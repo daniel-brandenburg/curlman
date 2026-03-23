@@ -1,0 +1,2 @@
+### Plain text response
+GET http://{{BASE_URL}}/text

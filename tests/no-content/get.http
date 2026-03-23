@@ -1,0 +1,2 @@
+### No content response
+GET http://{{BASE_URL}}/no-content

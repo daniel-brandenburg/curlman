@@ -1,0 +1,2 @@
+### Follow 301 redirect
+GET http://{{BASE_URL}}/redirect/301

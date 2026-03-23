@@ -1,0 +1,2 @@
+### Echo query params
+GET http://{{BASE_URL}}/query-echo?name=alice&role=admin

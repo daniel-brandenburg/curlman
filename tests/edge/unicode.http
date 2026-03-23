@@ -1,0 +1,5 @@
+### Unicode in request body
+POST http://{{BASE_URL}}/users
+Content-Type: application/json
+
+{"name": "日本語テスト", "email": "unicode@example.com"}

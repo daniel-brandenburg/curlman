@@ -1,0 +1,3 @@
+### Protected endpoint with valid token
+STATUS 200
+BODY $.message == "authorized"

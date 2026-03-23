@@ -1,0 +1,4 @@
+### Large response body
+STATUS 200
+BODY $.count == 500
+BODY $.items[0] exists

@@ -1,0 +1,3 @@
+### Follow 302 redirect
+STATUS 200
+BODY $.status == "ok"

@@ -1,0 +1,8 @@
+### create
+POST http://{{BASE_URL}}/users
+Content-Type: application/json
+
+{"name": "Charlie", "email": "charlie@example.com"}
+
+### list-after
+GET http://{{BASE_URL}}/users

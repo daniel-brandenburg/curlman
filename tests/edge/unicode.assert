@@ -1,0 +1,4 @@
+### Unicode in request body
+STATUS 201
+BODY $.name == "日本語テスト"
+BODY $.id exists

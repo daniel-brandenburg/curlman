@@ -1,0 +1,2 @@
+### Large response body
+GET http://{{BASE_URL}}/large

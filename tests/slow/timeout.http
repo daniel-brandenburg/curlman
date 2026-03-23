@@ -1,0 +1,2 @@
+### Slow response
+GET http://{{BASE_URL}}/slow/100

@@ -1,0 +1,4 @@
+### Echo query params
+STATUS 200
+BODY $.params.name == "alice"
+BODY $.params.role == "admin"

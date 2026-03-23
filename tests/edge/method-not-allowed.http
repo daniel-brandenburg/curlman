@@ -1,0 +1,2 @@
+### Method not allowed
+DELETE http://{{BASE_URL}}/health

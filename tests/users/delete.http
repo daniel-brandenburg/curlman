@@ -1,0 +1,2 @@
+### Delete user
+DELETE http://{{BASE_URL}}/users/00000000-0000-0000-0000-000000000002

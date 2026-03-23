@@ -1,0 +1,2 @@
+### Protected endpoint without token
+POST http://{{BASE_URL}}/auth/protected
