@@ -27,6 +27,7 @@ func NewRootCmd() *cobra.Command {
 	var testPath string
 	var update bool
 	var failFast bool
+	var plain bool
 	var verbose bool
 
 	root := &cobra.Command{
@@ -41,11 +42,11 @@ Omit to run all tests.`,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTests(envFile, testPath, filterFromArgs(args), update, failFast, verbose)
+			return runTests(envFile, testPath, filterFromArgs(args), update, failFast, outputMode(plain, verbose))
 		},
 	}
 
-	addTestFlags(root, &envFile, &testPath, &update, &failFast, &verbose)
+	addTestFlags(root, &envFile, &testPath, &update, &failFast, &plain, &verbose)
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newTUICmd())
 	return root
@@ -56,6 +57,7 @@ func newRunCmd() *cobra.Command {
 	var testPath string
 	var update bool
 	var failFast bool
+	var plain bool
 	var verbose bool
 
 	cmd := &cobra.Command{
@@ -68,21 +70,33 @@ test-path is an optional filter: a stem name ("create"), path prefix
 Omit to run all tests.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTests(envFile, testPath, filterFromArgs(args), update, failFast, verbose)
+			return runTests(envFile, testPath, filterFromArgs(args), update, failFast, outputMode(plain, verbose))
 		},
 	}
 
-	addTestFlags(cmd, &envFile, &testPath, &update, &failFast, &verbose)
+	addTestFlags(cmd, &envFile, &testPath, &update, &failFast, &plain, &verbose)
 	return cmd
 }
 
+// outputMode resolves the reporter mode from flag values.
+func outputMode(plain, verbose bool) reporter.Mode {
+	if verbose {
+		return reporter.ModeVerbose
+	}
+	if plain {
+		return reporter.ModePlain
+	}
+	return reporter.ModePretty
+}
+
 // addTestFlags registers the shared set of test flags onto cmd.
-func addTestFlags(cmd *cobra.Command, envFile, testPath *string, update, failFast, verbose *bool) {
+func addTestFlags(cmd *cobra.Command, envFile, testPath *string, update, failFast, plain, verbose *bool) {
 	cmd.Flags().StringVar(envFile, "env", ".env", "path to .env file")
 	cmd.Flags().StringVar(testPath, "path", "", "directory to search for tests (default: current directory)")
 	cmd.Flags().BoolVar(update, "update", false, "overwrite .assert files with actual responses")
 	cmd.Flags().BoolVar(failFast, "fail-fast", false, "stop after first failure")
-	cmd.Flags().BoolVarP(verbose, "verbose", "v", false, "print full request and response for every test")
+	cmd.Flags().BoolVar(plain, "plain", false, "plain PASS/FAIL output without grouping or icons")
+	cmd.Flags().BoolVarP(verbose, "verbose", "v", false, "plain output with full request/response details")
 }
 
 // filterFromArgs derives a test filter from CLI args.
@@ -137,7 +151,8 @@ func commonDirPrefix(a, b string) string {
 	return strings.Join(common, "/")
 }
 
-func runTests(envFile, testPath, filter string, update, failFast, verbose bool) error {
+func runTests(envFile, testPath, filter string, update, failFast bool, mode reporter.Mode) error {
+	r := reporter.New(mode)
 	vars, err := env.Load(envFile)
 	if err != nil {
 		return fmt.Errorf("loading env: %w", err)
@@ -208,7 +223,7 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 			if update {
 				resp, err := runner.Run(req)
 				if err != nil {
-					reporter.Error(testLabel, err)
+					r.Error(testLabel, err)
 					failed++
 					hasFailures = true
 					if failFast {
@@ -216,27 +231,25 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 					}
 					continue
 				}
-				if verbose {
-					printVerbose(req, resp)
-				}
+				r.Details(reporter.TestDetails{Method: req.Method, URL: req.URL, StatusCode: resp.StatusCode, Duration: resp.Duration, Body: resp.Body})
 				if err := writeSnapshot(pair, req, resp); err != nil {
 					return fmt.Errorf("writing snapshot for %s: %w", testLabel, err)
 				}
-				reporter.Updated(testLabel)
+				r.Updated(testLabel)
 				continue
 			}
 
 			// No assert block: skip
 			block, hasAssert := assertBlocks[req.Name]
 			if !hasAssert {
-				reporter.Skip(testLabel)
+				r.Skip(testLabel)
 				skipped++
 				continue
 			}
 
 			resp, err := runner.Run(req)
 			if err != nil {
-				reporter.Error(testLabel, err)
+				r.Error(testLabel, err)
 				failed++
 				hasFailures = true
 				if failFast {
@@ -245,25 +258,23 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 				continue
 			}
 
-			if verbose {
-				printVerbose(req, resp)
-			}
+			r.Details(reporter.TestDetails{Method: req.Method, URL: req.URL, StatusCode: resp.StatusCode, Duration: resp.Duration, Body: resp.Body})
 
 			results := asserter.Evaluate(block, resp)
 			allPassed := true
 			var failResults []asserter.Result
-			for _, r := range results {
-				if !r.Passed {
+			for _, res := range results {
+				if !res.Passed {
 					allPassed = false
-					failResults = append(failResults, r)
+					failResults = append(failResults, res)
 				}
 			}
 
 			if allPassed {
-				reporter.Pass(testLabel, resp.Duration)
+				r.Pass(testLabel, resp.Duration)
 				passed++
 			} else {
-				reporter.Fail(testLabel, resp.Duration, failResults)
+				r.Fail(testLabel, resp.Duration, failResults)
 				failed++
 				hasFailures = true
 				if failFast {
@@ -277,7 +288,7 @@ func runTests(envFile, testPath, filter string, update, failFast, verbose bool) 
 		}
 	}
 
-	reporter.Summary(passed, failed, skipped)
+	r.Summary(passed, failed, skipped)
 
 	if hasFailures {
 		return ErrTestsFailed
@@ -338,10 +349,3 @@ func writeSnapshot(pair discovery.TestPair, req parser.Request, resp runner.Resp
 	return os.WriteFile(assertFile, []byte(sb.String()), 0644)
 }
 
-func printVerbose(req parser.Request, resp runner.Response) {
-	fmt.Printf("  → %s %s\n", req.Method, req.URL)
-	fmt.Printf("  ← %d\n", resp.StatusCode)
-	if resp.Body != "" {
-		fmt.Printf("  %s\n", resp.Body)
-	}
-}
