@@ -13,6 +13,25 @@ import (
 	"github.com/tidwall/pretty"
 )
 
+// statusIconChar returns the bare icon character for a status, without any ANSI styling.
+// Use this when the character will be wrapped in a containing style (e.g. selected item).
+func statusIconChar(status TestStatus, spinnerFrame string) string {
+	switch status {
+	case StatusPass:
+		return "✓"
+	case StatusFail:
+		return "✗"
+	case StatusSkip:
+		return "-"
+	case StatusError:
+		return "!"
+	case StatusRunning:
+		return spinnerFrame
+	default:
+		return "○"
+	}
+}
+
 // statusIcon returns the colored icon for a given test status.
 func statusIcon(status TestStatus, spinnerFrame string) string {
 	switch status {
@@ -31,7 +50,8 @@ func statusIcon(status TestStatus, spinnerFrame string) string {
 	}
 }
 
-// dirStatus returns the aggregate status of all items in a directory group.
+// dirStatus returns the aggregate status of all items in a directory group,
+// including items in nested subdirectories.
 func dirStatus(items []TestItem, group string) TestStatus {
 	hasFail := false
 	hasRunning := false
@@ -39,7 +59,7 @@ func dirStatus(items []TestItem, group string) TestStatus {
 	allPending := true
 
 	for _, item := range items {
-		if item.DirGroup != group {
+		if item.DirGroup != group && !strings.HasPrefix(item.DirGroup, group+"/") {
 			continue
 		}
 		allPending = allPending && item.Status == StatusPending
@@ -79,64 +99,94 @@ func renderStatusBar(m Model) string {
 		}
 	}
 
-	bg := lipgloss.Color("#1e293b")
-	title := statusBarTitleStyle.Render("curlman")
+	const bg = lipgloss.Color("#1e293b")
+	seg := func(fg lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Background(bg).Foreground(fg)
+	}
 
-	passStr := passIconStyle.Copy().Background(bg).Render(fmt.Sprintf("  ✓%d", passed))
-	failStr := failIconStyle.Copy().Background(bg).Render(fmt.Sprintf("  ✗%d", failed))
-	skipStr := lipgloss.NewStyle().Foreground(colorSkip).Background(bg).Render(fmt.Sprintf("  -%d", skipped))
+	title := seg(colorText).Bold(true).Padding(0, 1).Render("curlman")
+	div := seg(colorBorder).Render("  │  ")
 
-	var runIndicator string
+	total := seg(colorSubtext).Render(fmt.Sprintf("%d tests", len(m.items)))
+
+	passColor := colorMuted
+	if passed > 0 {
+		passColor = colorPass
+	}
+	failColor := colorMuted
+	if failed > 0 {
+		failColor = colorFail
+	}
+	skipColor := colorMuted
+	if skipped > 0 {
+		skipColor = colorSkip
+	}
+	counts := seg(passColor).Render(fmt.Sprintf("  ✓ %d", passed)) +
+		seg(failColor).Render(fmt.Sprintf("  ✗ %d", failed)) +
+		seg(skipColor).Render(fmt.Sprintf("  - %d", skipped))
+
+	var runPart string
 	if m.running > 0 {
-		runIndicator = "  " + lipgloss.NewStyle().Foreground(colorRunning).Background(bg).Render(m.spinner.View()+" running…")
+		runPart = div + seg(colorRunning).Render(m.spinner.View()+" running…")
 	} else if m.hasRun {
-		runIndicator = "  " + mutedStyle.Copy().Background(bg).Render("done")
+		runPart = div + seg(colorMuted).Render("done")
 	} else {
-		runIndicator = "  " + mutedStyle.Copy().Background(bg).Render("press R to run all")
+		runPart = div + seg(colorMuted).Render("R to run all")
 	}
 
-	right := statusBarStyle.Render(
-		fmt.Sprintf(" %d tests", len(m.items)) + passStr + failStr + skipStr + runIndicator,
-	)
+	right := total + counts + runPart
 
-	titleWidth := lipgloss.Width(title)
-	rightWidth := lipgloss.Width(right)
-	gap := m.width - titleWidth - rightWidth
-	if gap < 0 {
-		gap = 0
+	leftW := lipgloss.Width(title + div)
+	rightW := lipgloss.Width(right)
+	gapW := m.width - leftW - rightW
+	if gapW < 0 {
+		gapW = 0
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top,
-		title,
-		statusBarStyle.Render(strings.Repeat(" ", gap)),
-		right,
-	)
+	return title + div +
+		lipgloss.NewStyle().Background(bg).Width(gapW).Render("") +
+		right
 }
 
 // renderKeyBar renders the bottom keybinding bar.
 func renderKeyBar(m Model) string {
+	const bg = lipgloss.Color("#1e293b")
+	k := lipgloss.NewStyle().Background(bg).Foreground(colorSubtext).Bold(true)
+	d := lipgloss.NewStyle().Background(bg).Foreground(colorMuted)
+	dot := d.Render("  ·  ")
+
+	kp := func(key, desc string) string {
+		return k.Render(key) + d.Render(" "+desc)
+	}
+
 	node := m.selectedNode()
 
-	var pairs []string
+	var parts []string
 	if m.activePanel == 0 {
-		pairs = append(pairs, keyStyle.Render("↑↓")+keyDescStyle.Render(" navigate"))
+		parts = append(parts, kp("↑↓", "navigate"))
 		if node != nil && node.IsDir {
-			pairs = append(pairs, keyStyle.Render("enter")+keyDescStyle.Render(" toggle"))
-			pairs = append(pairs, keyStyle.Render("r")+keyDescStyle.Render(" run folder"))
+			parts = append(parts,
+				kp("←→", "expand/collapse"),
+				kp("e", "expand all"),
+				kp("c", "collapse all"),
+				kp("r", "run folder"),
+			)
 		} else {
-			pairs = append(pairs, keyStyle.Render("enter/r")+keyDescStyle.Render(" run"))
+			parts = append(parts, kp("enter", "run"))
 		}
-		pairs = append(pairs, keyStyle.Render("R")+keyDescStyle.Render(" run all"))
+		parts = append(parts, kp("R", "run all"))
 	} else {
-		pairs = append(pairs, keyStyle.Render("↑↓")+keyDescStyle.Render(" scroll"))
+		parts = append(parts, kp("↑↓", "scroll"))
 	}
-	pairs = append(pairs,
-		keyStyle.Render("tab")+keyDescStyle.Render(" switch panel"),
-		keyStyle.Render("q")+keyDescStyle.Render(" quit"),
-	)
+	parts = append(parts, kp("tab", "switch"), kp("q", "quit"))
 
-	sep := keyDescStyle.Render("  ·  ")
-	return keyBarStyle.Width(m.width).Render(strings.Join(pairs, sep))
+	content := " " + strings.Join(parts, dot)
+	contentW := lipgloss.Width(content)
+	padW := m.width - contentW
+	if padW < 0 {
+		padW = 0
+	}
+	return content + lipgloss.NewStyle().Background(bg).Width(padW).Render("")
 }
 
 // renderList renders the left panel tree.
@@ -175,6 +225,7 @@ func renderList(m Model, innerHeight int) string {
 		node := m.tree[nodeIdx]
 		selected := i == m.treeCursor
 
+		indent := strings.Repeat("  ", node.Depth)
 		var line string
 		if node.IsDir {
 			arrow := "▼"
@@ -182,23 +233,24 @@ func renderList(m Model, innerHeight int) string {
 				arrow = "▶"
 			}
 			ds := dirStatus(m.items, node.DirGroup)
-			icon := statusIcon(ds, m.spinner.View())
-			raw := fmt.Sprintf("%s %s %s/", arrow, icon, node.Label)
 			if selected {
+				iconCh := statusIconChar(ds, m.spinner.View())
+				raw := fmt.Sprintf("%s%s %s %s/", indent, arrow, iconCh, node.Label)
 				line = selectedItemStyle.Width(m.leftWidth).Render(raw)
 			} else {
+				icon := statusIcon(ds, m.spinner.View())
+				raw := fmt.Sprintf("%s%s %s %s/", indent, arrow, icon, node.Label)
 				line = groupHeaderStyle.Render(raw)
 			}
 		} else {
-			icon := statusIcon(m.items[node.ItemIdx].Status, m.spinner.View())
-			indent := "  "
-			if node.DirGroup != "" {
-				indent = "    " // extra indent under dir
-			}
-			raw := fmt.Sprintf("%s%s %s", indent, icon, node.Label)
+			status := m.items[node.ItemIdx].Status
 			if selected {
+				iconCh := statusIconChar(status, m.spinner.View())
+				raw := fmt.Sprintf("%s%s %s", indent, iconCh, node.Label)
 				line = selectedItemStyle.Width(m.leftWidth).Render(raw)
 			} else {
+				icon := statusIcon(status, m.spinner.View())
+				raw := fmt.Sprintf("%s%s %s", indent, icon, node.Label)
 				line = raw
 			}
 		}
@@ -269,7 +321,7 @@ func renderDirDetail(m Model, node *TreeNode) string {
 
 	pass, fail, skip, pending, running := 0, 0, 0, 0, 0
 	for _, item := range m.items {
-		if item.DirGroup != node.DirGroup {
+		if item.DirGroup != node.DirGroup && !strings.HasPrefix(item.DirGroup, node.DirGroup+"/") {
 			continue
 		}
 		switch item.Status {

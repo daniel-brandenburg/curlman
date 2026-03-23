@@ -43,8 +43,9 @@ type TestItem struct {
 // TreeNode is a node in the left-panel tree — either a directory or a test.
 type TreeNode struct {
 	IsDir    bool
-	Label    string // directory name or test base name
-	DirGroup string // the directory path this node belongs to (or is)
+	Label    string // display name (last path segment only)
+	DirGroup string // for dir nodes: the dir's own full path; for items: the parent dir full path
+	Depth    int    // indentation depth (0 = root-level)
 	ItemIdx  int    // index into items; -1 for dir nodes
 	Expanded bool   // dir nodes only
 }
@@ -63,67 +64,105 @@ func newTestItems(pairs []discovery.TestPair) []TestItem {
 	return items
 }
 
-// dirGroup returns the first path segment for directory grouping.
-// "users/create" → "users", "login" → "".
+// dirGroup returns the full parent directory path for grouping.
+// "users/create" → "users", "auth/users/create" → "auth/users", "login" → "".
 func dirGroup(name string) string {
 	name = filepath.ToSlash(name)
-	if idx := strings.Index(name, "/"); idx != -1 {
+	if idx := strings.LastIndex(name, "/"); idx != -1 {
 		return name[:idx]
 	}
 	return ""
 }
 
+// parentDir returns the parent directory of a path, or "" for top-level.
+// "auth/users" → "auth", "auth" → "".
+func parentDir(path string) string {
+	if idx := strings.LastIndex(path, "/"); idx != -1 {
+		return path[:idx]
+	}
+	return ""
+}
+
+// isAncestorChainExpanded returns true if dirPath and all its ancestors are expanded.
+func isAncestorChainExpanded(dirPath string, expandedMap map[string]bool) bool {
+	for dirPath != "" {
+		if !expandedMap[dirPath] {
+			return false
+		}
+		dirPath = parentDir(dirPath)
+	}
+	return true
+}
+
 // buildTree constructs the tree node slice from items.
-// Directory nodes are inserted immediately before their children.
+// Directory nodes are inserted immediately before the first child encountered,
+// with intermediate parent dirs created as needed for nested paths.
 func buildTree(items []TestItem) []TreeNode {
 	var nodes []TreeNode
-	seenGroups := map[string]bool{}
+	seenDirs := map[string]bool{}
 
-	for i, item := range items {
-		if item.DirGroup == "" {
-			nodes = append(nodes, TreeNode{
-				IsDir:   false,
-				Label:   item.Label,
-				ItemIdx: i,
-			})
-		} else {
-			if !seenGroups[item.DirGroup] {
-				seenGroups[item.DirGroup] = true
-				nodes = append(nodes, TreeNode{
-					IsDir:    true,
-					Label:    item.DirGroup,
-					DirGroup: item.DirGroup,
-					ItemIdx:  -1,
-					Expanded: true,
-				})
+	// ensureDir creates all intermediate dir nodes for dirPath if not yet seen.
+	ensureDir := func(dirPath string) {
+		parts := strings.Split(dirPath, "/")
+		for i := range parts {
+			path := strings.Join(parts[:i+1], "/")
+			if seenDirs[path] {
+				continue
 			}
+			seenDirs[path] = true
 			nodes = append(nodes, TreeNode{
-				IsDir:    false,
-				Label:    strings.TrimPrefix(item.Label, item.DirGroup+"/"),
-				DirGroup: item.DirGroup,
-				ItemIdx:  i,
+				IsDir:    true,
+				Label:    parts[i],
+				DirGroup: path,
+				Depth:    i,
+				ItemIdx:  -1,
+				Expanded: true,
 			})
 		}
+	}
+
+	for i, item := range items {
+		if item.DirGroup != "" {
+			ensureDir(item.DirGroup)
+		}
+		depth := 0
+		if item.DirGroup != "" {
+			depth = strings.Count(item.DirGroup, "/") + 1
+		}
+		nodes = append(nodes, TreeNode{
+			IsDir:    false,
+			Label:    strings.TrimPrefix(filepath.ToSlash(item.Label), item.DirGroup+"/"),
+			DirGroup: item.DirGroup,
+			Depth:    depth,
+			ItemIdx:  i,
+		})
 	}
 	return nodes
 }
 
-// visibleNodes returns indices into tree of nodes currently visible
-// (i.e. all dir nodes, root-level tests, and children of expanded dirs).
+// visibleNodes returns indices into tree of nodes currently visible.
+// Uses a two-pass approach: first build expandedMap, then check ancestry.
 func visibleNodes(tree []TreeNode) []int {
-	var visible []int
-	var currentDir string
-	var dirExpanded bool
+	// First pass: record expanded state for every dir node.
+	expandedMap := map[string]bool{}
+	for _, node := range tree {
+		if node.IsDir {
+			expandedMap[node.DirGroup] = node.Expanded
+		}
+	}
 
+	// Second pass: a node is visible if all its ancestor dirs are expanded.
+	var visible []int
 	for i, node := range tree {
 		if node.IsDir {
-			currentDir = node.DirGroup
-			dirExpanded = node.Expanded
-			visible = append(visible, i)
-		} else if node.DirGroup == "" {
-			visible = append(visible, i)
-		} else if node.DirGroup == currentDir && dirExpanded {
-			visible = append(visible, i)
+			parent := parentDir(node.DirGroup)
+			if parent == "" || isAncestorChainExpanded(parent, expandedMap) {
+				visible = append(visible, i)
+			}
+		} else {
+			if node.DirGroup == "" || isAncestorChainExpanded(node.DirGroup, expandedMap) {
+				visible = append(visible, i)
+			}
 		}
 	}
 	return visible

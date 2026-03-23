@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -164,6 +165,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 
+			case keyMatches(msg, m.keys.Right):
+				node := m.selectedNode()
+				if node != nil && node.IsDir && !node.Expanded {
+					m = m.toggleDir()
+					m.viewport.SetContent(renderDetail(m))
+				}
+				return m, nil
+
+			case keyMatches(msg, m.keys.Left):
+				node := m.selectedNode()
+				if node != nil && node.IsDir && node.Expanded {
+					m = m.toggleDir()
+					m.viewport.SetContent(renderDetail(m))
+				}
+				return m, nil
+
+			case keyMatches(msg, m.keys.ExpandAll):
+				node := m.selectedNode()
+				if node != nil && node.IsDir {
+					m = m.expandAll(node.DirGroup)
+					m.viewport.SetContent(renderDetail(m))
+				}
+				return m, nil
+
+			case keyMatches(msg, m.keys.CollapseAll):
+				node := m.selectedNode()
+				if node != nil && node.IsDir {
+					m = m.collapseAll(node.DirGroup)
+					m.viewport.SetContent(renderDetail(m))
+				}
+				return m, nil
+
 			case keyMatches(msg, m.keys.Enter):
 				node := m.selectedNode()
 				if node == nil {
@@ -283,6 +316,41 @@ func (m Model) toggleDir() Model {
 	return m
 }
 
+// expandAll expands the dir at dirGroup and all its descendant dirs.
+func (m Model) expandAll(dirGroup string) Model {
+	for i := range m.tree {
+		if m.tree[i].IsDir {
+			if m.tree[i].DirGroup == dirGroup || strings.HasPrefix(m.tree[i].DirGroup, dirGroup+"/") {
+				m.tree[i].Expanded = true
+			}
+		}
+	}
+	m.visibleTree = visibleNodes(m.tree)
+	if m.treeCursor >= len(m.visibleTree) {
+		m.treeCursor = len(m.visibleTree) - 1
+	}
+	return m
+}
+
+// collapseAll collapses the dir at dirGroup and all its descendant dirs.
+func (m Model) collapseAll(dirGroup string) Model {
+	for i := range m.tree {
+		if m.tree[i].IsDir {
+			if m.tree[i].DirGroup == dirGroup || strings.HasPrefix(m.tree[i].DirGroup, dirGroup+"/") {
+				m.tree[i].Expanded = false
+			}
+		}
+	}
+	m.visibleTree = visibleNodes(m.tree)
+	if m.treeCursor >= len(m.visibleTree) {
+		m.treeCursor = len(m.visibleTree) - 1
+	}
+	if m.treeCursor < 0 {
+		m.treeCursor = 0
+	}
+	return m
+}
+
 // --- Run actions ---
 
 func (m Model) resetItem(idx int) {
@@ -304,11 +372,11 @@ func (m Model) runItem(idx int) (Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, runTestCmd(idx, m.items[idx].Pair, m.envVars))
 }
 
-// runDir runs all tests whose DirGroup matches group.
+// runDir runs all tests whose DirGroup matches group or is nested under it.
 func (m Model) runDir(group string) (Model, tea.Cmd) {
 	cmds := []tea.Cmd{m.spinner.Tick}
 	for i := range m.items {
-		if m.items[i].DirGroup == group {
+		if m.items[i].DirGroup == group || strings.HasPrefix(m.items[i].DirGroup, group+"/") {
 			m.resetItem(i)
 			m.items[i].Status = StatusRunning
 			m.running++

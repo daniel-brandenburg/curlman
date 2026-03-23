@@ -86,6 +86,11 @@ func runTestCmd(index int, pair discovery.TestPair, vars map[string]string) tea.
 			status = StatusFail
 		}
 
+		// Ensure the running state is visible for at least 200ms so the spinner animates.
+		if elapsed := time.Since(ranAt); elapsed < 200*time.Millisecond {
+			time.Sleep(200*time.Millisecond - elapsed)
+		}
+
 		return testResultMsg{
 			index:      index,
 			status:     status,
