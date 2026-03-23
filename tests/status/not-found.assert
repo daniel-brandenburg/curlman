@@ -1,0 +1,3 @@
+### Force 404
+STATUS 404
+BODY $.status == 404

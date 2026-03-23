@@ -1,0 +1,3 @@
+### Get echo
+STATUS 200
+BODY $.url exists

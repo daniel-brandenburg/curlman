@@ -1,0 +1,4 @@
+### Get nonexistent user
+STATUS 404
+BODY $.error exists
+BODY $.error == "user not found"

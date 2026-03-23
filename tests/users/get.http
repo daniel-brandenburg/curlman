@@ -1,0 +1,3 @@
+### Get pre-seeded user
+GET http://{{BASE_URL}}/users/00000000-0000-0000-0000-000000000001
+Accept: application/json

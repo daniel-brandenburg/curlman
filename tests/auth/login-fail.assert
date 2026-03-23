@@ -1,0 +1,5 @@
+### Login failure
+STATUS 401
+HEADER content-type: application/json
+BODY $.error exists
+BODY $.error == "invalid credentials"

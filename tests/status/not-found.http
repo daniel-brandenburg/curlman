@@ -1,0 +1,2 @@
+### Force 404
+GET http://{{BASE_URL}}/status/404

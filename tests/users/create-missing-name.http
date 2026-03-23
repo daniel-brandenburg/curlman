@@ -1,0 +1,5 @@
+### Create user missing name
+POST http://{{BASE_URL}}/users
+Content-Type: application/json
+
+{"email":"noname@example.com"}

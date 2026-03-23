@@ -1,0 +1,4 @@
+### Echo request
+GET http://{{BASE_URL}}/echo
+Accept: application/json
+X-Test-Header: curlman

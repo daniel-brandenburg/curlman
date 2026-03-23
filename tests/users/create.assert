@@ -1,0 +1,7 @@
+### Create user
+STATUS 201
+HEADER content-type: application/json
+BODY $.id exists
+BODY $.name == "TestUser"
+BODY $.email == "test@example.com"
+BODY $.created_at exists

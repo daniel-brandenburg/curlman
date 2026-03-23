@@ -1,0 +1,5 @@
+### Check health
+STATUS 200
+HEADER content-type: application/json
+BODY $.status == "ok"
+BODY $.version exists

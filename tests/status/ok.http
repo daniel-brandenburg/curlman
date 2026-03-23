@@ -1,0 +1,2 @@
+### Force 200
+GET http://{{BASE_URL}}/status/200

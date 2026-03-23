@@ -1,0 +1,5 @@
+### List users
+STATUS 200
+HEADER content-type: application/json
+BODY $.users exists
+BODY $.count exists

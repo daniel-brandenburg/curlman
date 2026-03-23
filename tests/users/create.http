@@ -1,0 +1,5 @@
+### Create user
+POST http://{{BASE_URL}}/users
+Content-Type: application/json
+
+{"name":"TestUser","email":"test@example.com"}

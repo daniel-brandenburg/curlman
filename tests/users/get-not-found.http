@@ -1,0 +1,3 @@
+### Get nonexistent user
+GET http://{{BASE_URL}}/users/does-not-exist
+Accept: application/json

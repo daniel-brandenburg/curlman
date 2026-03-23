@@ -1,0 +1,6 @@
+### Echo request
+STATUS 200
+HEADER content-type: application/json
+BODY $.method == "GET"
+BODY $.path == "/echo"
+BODY $.headers exists

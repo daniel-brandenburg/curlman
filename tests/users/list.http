@@ -1,0 +1,3 @@
+### List users
+GET http://{{BASE_URL}}/users
+Accept: application/json

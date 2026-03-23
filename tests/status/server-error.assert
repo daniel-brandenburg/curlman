@@ -1,0 +1,3 @@
+### Force 500
+STATUS 500
+BODY $.status == 500

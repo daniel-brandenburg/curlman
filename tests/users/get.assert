@@ -1,0 +1,7 @@
+### Get pre-seeded user
+STATUS 200
+HEADER content-type: application/json
+BODY $.id == "00000000-0000-0000-0000-000000000001"
+BODY $.name == "Alice"
+BODY $.email == "alice@example.com"
+BODY $.created_at exists

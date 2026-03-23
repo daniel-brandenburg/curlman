@@ -1,0 +1,4 @@
+### Create user missing name
+STATUS 400
+BODY $.error exists
+BODY $.error == "name is required"

@@ -1,0 +1,6 @@
+### Login success
+STATUS 200
+HEADER content-type: application/json
+BODY $.token exists
+BODY $.token == "test-token-abc123"
+BODY $.type == "Bearer"
